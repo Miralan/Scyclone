@@ -75,12 +75,11 @@ def train(rank, a):
         optim_g.load_state_dict(state_dict_do["optim_g"])
         optim_d.load_state_dict(state_dict_do["optim_d"])
 
-    training_filelist, validation_filelist = get_dataset_filelist(a)
+    training_filelist1, training_filelist2 = get_dataset_filelist()
 
-    trainset = MelDataset(training_filelist, a.segment_size, a.n_fft, a.num_mels,
-                          a.hop_size, a.win_size, a.sampling_rate, a.fmin, a.fmax, n_cache_reuse=0,
-                          shuffle=False if a.num_gpus > 1 else True, fmax_loss=a.fmax_for_loss, device=device,
-                          fine_tuning=a.fine_tuning, base_mels_path=a.input_mels_dir)
+    trainset = MelDataset(training_filelist1, training_filelist2, a.segment_size, a.n_fft, a.num_mels,
+                          a.hop_size, a.win_size, a.sampling_rate, a.fmin, a.fmax,
+                          shuffle=False if a.num_gpus > 1 else True, device=device,)
 
     train_sampler = DistributedSampler(trainset) if a.num_gpus > 1 else None
 
@@ -100,7 +99,6 @@ def main():
     parser.add_argument('--input_training_file', default='LJSpeech-1.1/training.txt')
     parser.add_argument('--input_validation_file', default='LJSpeech-1.1/validation.txt')
     parser.add_argument('--checkpoint_path', default='cp_hifigan')
-    parser.add_argument('--config', default='')
     parser.add_argument('--training_epochs', default=3100, type=int)
     parser.add_argument('--stdout_interval', default=5, type=int)
     parser.add_argument('--checkpoint_interval', default=5000, type=int)
