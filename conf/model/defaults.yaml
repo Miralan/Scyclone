@@ -1,0 +1,7 @@
+# @package _group_
+generator:
+    in_channels: 80
+    channels: 256
+discriminator:
+    in_channels: 80
+    channels: 256

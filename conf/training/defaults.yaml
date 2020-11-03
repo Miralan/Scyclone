@@ -1,0 +1,5 @@
+# @package _group_
+num_gpus: 10
+batch_size: 100
+seed: 1234
+training_epochs: 3000

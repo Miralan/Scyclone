@@ -84,8 +84,9 @@ def mel_spectrogram(y, n_fft, num_mels, sampling_rate, hop_size, win_size, fmin,
 
     return spec
 
+
 class MelDataset(Dataset):
-    def __init__(self,training_files1, training_files2, segment_size, n_fft, num_mels,
+    def __init__(self, training_files1, training_files2, segment_size, n_fft, num_mels,
                  hop_size, win_size, sampling_rate,  fmin, fmax, shuffle=True, device=None):
         self.audiofiles1 = training_files1
         self.audiofiles2 = training_files2

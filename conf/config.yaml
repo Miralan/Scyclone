@@ -1,0 +1,4 @@
+defaults:
+    - model: defaults
+    - dataset: defaults
+    - training: defaults

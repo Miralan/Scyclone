@@ -3,6 +3,7 @@
 # @Author  : Miralan
 # @File    : train.py
 
+import hydra
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import os
@@ -79,7 +80,7 @@ def train(rank, a):
 
     trainset = MelDataset(training_filelist1, training_filelist2, a.segment_size, a.n_fft, a.num_mels,
                           a.hop_size, a.win_size, a.sampling_rate, a.fmin, a.fmax,
-                          shuffle=False if a.num_gpus > 1 else True, device=device,)
+                          shuffle=False if a.num_gpus > 1 else True, device=device)
 
     train_sampler = DistributedSampler(trainset) if a.num_gpus > 1 else None
 
@@ -90,7 +91,8 @@ def train(rank, a):
                               drop_last=True)
 
 
-def main():
+@hydra.main(config_path="conf", config_name="config")
+def main(cfg):
     print('Initializing Training Process..')
     parser = argparse.ArgumentParser()
 
@@ -115,12 +117,16 @@ def main():
     if torch.cuda.is_available():
         torch.cuda.manual_seed(a.seed)
         a.num_gpus = torch.cuda.device_count()
-        a.batch_size = int(a.batch_size / a.num_gpus)
+        cfg.training.batch_size = int(cfg.training.batch_size / cfg.training.num_gpus)
         print('Batch size per GPU :', a.batch_size)
     else:
         pass
 
     if a.num_gpus > 1:
-        mp.spawn(train, nprocs=a.num_gpus, args=(a,))
+        mp.spawn(train, nprocs=a.num_gpus, args=(cfg.training,))
     else:
-        train(0, a)
+        train(0, cfg.training)
+
+
+if __name__ == '__main__':
+    main()
