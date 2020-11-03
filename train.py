@@ -3,26 +3,24 @@
 # @Author  : Miralan
 # @File    : train.py
 
-import hydra
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import os
 import time
 import torch
-import argparse
+import hydra
 from itertools import chain
-import torch.nn as nn
+import torch.nn.functional as F
 import torch.multiprocessing as mp
-from torch.utils.data import DistributedSampler, DataLoader
-from torch.nn.parallel import DistributedDataParallel
-from torch.distributed import init_process_group
-import numpy as np
 from model.generator import Generator
+from adabelief_pytorch import AdaBelief
 from model.discriminator import Discriminator
-from meldataset import MelDataset, mel_spectrogram, get_dataset_filelist
+from torch.distributed import init_process_group
+from torch.nn.parallel import DistributedDataParallel
+from meldataset import MelDataset, get_dataset_filelist
 from torch.utils.data import DistributedSampler, DataLoader
 from utils import scan_checkpoint, save_checkpoint, load_checkpoint
-from adabelief_pytorch import AdaBelief
+
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 torch.backends.cudnn.benchmark = True
@@ -129,32 +127,49 @@ def train(rank, a):
             optim_d.step()
 
             # Update Generator loss
+            cycle_x = g_y2x(fake_y)
+            cycle_y = g_x2y(fake_x)
 
+            indetity_x = g_y2x(real_x)
+            indetity_y = g_x2y(real_y)
 
+            d_fake_x = d_x(fake_x)
+            d_fake_y = d_y(real_y)
 
+            g_loss = torch.mean(-d_fake_x * torch.gt(-d_fake_x, 0)) + torch.mean(-d_fake_y * torch.gt(-d_fake_y, 0)) + \
+                     a.lambda_cy * F.l1_loss(cycle_x, real_x) + a.lambda_cy * F.l1_loss(cycle_y, real_y) + \
+                     a.lambda_id * F.l1_loss(indetity_x, real_x) + a.lambda_id * F.l1_loss(indetity_y, real_y)
 
+            optim_g.zero_grad()
+            g_loss.backward()
+            optim_g.step()
+
+            if rank == 0:
+                # STDOUT logging
+                if steps % a.stdout_interval == 0:
+                    print('Steps : {:d}, Gen Loss Total : {:4.3f}, Dis Loss. Error : {:4.3f}, s/b : {:4.3f}'.
+                          format(steps, g_loss, d_loss, time.time() - start_b))
+
+            # checkpointing
+            if steps % a.checkpoint_interval == 0 and steps != 0:
+                # save generator g_x2y and g_y2x
+                checkpoint_path = "{}/g_{:08d}".format(a.checkpoint_path, steps)
+                save_checkpoint(checkpoint_path,
+                                {'g_x2y': (g_x2y.module if a.num_gpus > 1 else g_x2y).state_dict(),
+                                 'g_y2x': (g_y2x.module if a.num_gpus > 1 else g_y2x).state_dict()})
+
+                checkpoint_path = "{}/do_{:08d}".format(a.checkpoint_path, steps)
+                save_checkpoint(checkpoint_path,
+                               {'d_x': (d_x.module if a.num_gpus > 1 else d_x).state_dict(),
+                                'd_y': (d_y.module if a.num_gpus > 1 else d_y).state_dict(),
+                                'optim_g': optim_g.state_dict(), 'optim_d': optim_d.state_dict(),
+                                'steps': steps, 'epoch': epoch})
+            steps += 1
 
 
 @hydra.main(config_path="conf", config_name="config")
 def main(cfg):
     print('Initializing Training Process..')
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--input_wavs_dir', default='LJSpeech-1.1/wavs')
-    parser.add_argument('--input_mels_dir', default='ft_dataset')
-    parser.add_argument('--input_training_file', default='LJSpeech-1.1/training.txt')
-    parser.add_argument('--input_validation_file', default='LJSpeech-1.1/validation.txt')
-    parser.add_argument('--checkpoint_path', default='cp_hifigan')
-    parser.add_argument('--training_epochs', default=3100, type=int)
-    parser.add_argument('--stdout_interval', default=5, type=int)
-    parser.add_argument('--checkpoint_interval', default=5000, type=int)
-    parser.add_argument('--summary_interval', default=100, type=int)
-    parser.add_argument('--validation_interval', default=1000, type=int)
-    parser.add_argument('--batch_size', default=100, type=int)
-    parser.add_argument('--n_gpus', default=1, type=int)
-    parser.add_argument('--seed', default=1234, type=int)
-    parser.add_argument('--learning_rate', default=0.01, type=float)
-    a = parser.parse_args()
 
     torch.manual_seed(cfg.training.seed)
 
@@ -166,7 +181,7 @@ def main(cfg):
     else:
         pass
 
-    if a.num_gpus > 1:
+    if cfg.training.num_gpus > 1:
         mp.spawn(train, nprocs=cfg.training.num_gpus, args=(cfg.training,))
     else:
         train(0, cfg.training)
