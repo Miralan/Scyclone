@@ -3,6 +3,7 @@
 # @Author  : Miralan
 # @File    : test.py
 import hydra
+import torch
 
 
 def demo(a):
@@ -11,11 +12,11 @@ def demo(a):
 
 @hydra.main(config_path="conf", config_name="config")
 def test(cfg):
-    print(cfg.training.batch_size)
-    demo(cfg.training)
-    cfg.training.batch_size = cfg.training.batch_size // cfg.training.num_gpus
-    print(cfg.training.batch_size)
-    demo(cfg.training)
+    print(cfg.training)
+    a = torch.randn(1, 2, 3)
+    b = torch.abs(a * torch.gt(a, 0))
+    print(a)
+    print(b)
 
 
 if __name__ == '__main__':

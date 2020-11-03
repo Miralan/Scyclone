@@ -7,6 +7,7 @@ import hydra
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import os
+import time
 import torch
 import argparse
 from itertools import chain
@@ -89,6 +90,49 @@ def train(rank, a):
                               batch_size=a.batch_size,
                               pin_memory=True,
                               drop_last=True)
+    g_x2y.train()
+    g_y2x.train()
+    d_x.train()
+    d_y.train()
+
+    for epoch in range(max(0, last_epoch), a.training_epochs):
+        if rank == 0:
+            start = time.time()
+            print("Epoch: {}".format(epoch + 1))
+
+        if a.num_gpus > 1:
+           train_sampler.set_epoch(epoch)
+
+        for i, batch in enumerate(train_loader):
+            if rank == 0:
+                start_b = time.time()
+            real_x, real_y = batch
+            real_x, real_y = real_x.to(device), real_y.to(device)
+
+            # Update Discriminator
+            fake_y = g_x2y(real_x)
+            fake_x = g_y2x(real_y)
+
+            d_real_x = d_x(real_x)
+            d_fake_x = d_x(fake_x)
+
+            d_real_y = d_y(real_y)
+            d_fake_y = d_y(fake_y)
+
+            d_loss = torch.mean((0.5 - d_real_x) * torch.gt(0.5 - d_real_x, 0)) + \
+                     torch.mean((0.5 - d_real_y) * torch.gt(0.5 - d_real_y, 0)) + \
+                     torch.mean((0.5 + d_fake_x.detach()) * torch.gt(0.5 + d_fake_x.detach(), 0)) + \
+                     torch.mean((0.5 + d_fake_y.detach()) * torch.gt(0.5 + d_fake_y.detach(), 0))
+
+            optim_d.zero_grad()
+            d_loss.backward()
+            optim_d.step()
+
+            # Update Generator loss
+
+
+
+
 
 
 @hydra.main(config_path="conf", config_name="config")
@@ -112,18 +156,18 @@ def main(cfg):
     parser.add_argument('--learning_rate', default=0.01, type=float)
     a = parser.parse_args()
 
-    torch.manual_seed(a.seed)
+    torch.manual_seed(cfg.training.seed)
 
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(a.seed)
-        a.num_gpus = torch.cuda.device_count()
+        torch.cuda.manual_seed(cfg.training.seed)
+        cfg.training.num_gpus = torch.cuda.device_count()
         cfg.training.batch_size = int(cfg.training.batch_size / cfg.training.num_gpus)
-        print('Batch size per GPU :', a.batch_size)
+        print('Batch size per GPU :', cfg.training.batch_size)
     else:
         pass
 
     if a.num_gpus > 1:
-        mp.spawn(train, nprocs=a.num_gpus, args=(cfg.training,))
+        mp.spawn(train, nprocs=cfg.training.num_gpus, args=(cfg.training,))
     else:
         train(0, cfg.training)
 
