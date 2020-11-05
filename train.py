@@ -111,17 +111,19 @@ def train(rank, a):
             fake_y = g_x2y(real_x)
             fake_x = g_y2x(real_y)
 
-            d_real_x = d_x(real_x)
-            d_fake_x = d_x(fake_x)
+            # Add some gaussian noise for robust training
+            d_real_x = d_x(real_x + 0.01 * torch.randn_like(real_x).to(real_x).detach())
+            d_fake_x = d_x(fake_x + 0.01 * torch.randn_like(fake_x).to(fake_x).detach())
 
-            d_real_y = d_y(real_y)
-            d_fake_y = d_y(fake_y)
+            d_real_y = d_y(real_y + 0.01 * torch.randn_like(real_y).to(real_y).detach())
+            d_fake_y = d_y(fake_y + 0.01 * torch.randn_like(fake_y).to(fake_y).detach())
 
             d_loss = torch.mean((0.5 - d_real_x) * torch.gt(0.5 - d_real_x, 0)) + \
                      torch.mean((0.5 - d_real_y) * torch.gt(0.5 - d_real_y, 0)) + \
                      torch.mean((0.5 + d_fake_x.detach()) * torch.gt(0.5 + d_fake_x.detach(), 0)) + \
                      torch.mean((0.5 + d_fake_y.detach()) * torch.gt(0.5 + d_fake_y.detach(), 0))
 
+            # Discriminator loss backward
             optim_d.zero_grad()
             d_loss.backward()
             optim_d.step()
@@ -140,6 +142,7 @@ def train(rank, a):
                      a.lambda_cy * F.l1_loss(cycle_x, real_x) + a.lambda_cy * F.l1_loss(cycle_y, real_y) + \
                      a.lambda_id * F.l1_loss(indetity_x, real_x) + a.lambda_id * F.l1_loss(indetity_y, real_y)
 
+            # Generator loss backward
             optim_g.zero_grad()
             g_loss.backward()
             optim_g.step()
