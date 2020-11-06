@@ -118,10 +118,8 @@ def train(rank, a):
             d_real_y = d_y(real_y + 0.01 * torch.randn_like(real_y).to(real_y).detach())
             d_fake_y = d_y(fake_y + 0.01 * torch.randn_like(fake_y).to(fake_y).detach())
 
-            d_loss = torch.mean((0.5 - d_real_x) * torch.gt(0.5 - d_real_x, 0)) + \
-                     torch.mean((0.5 - d_real_y) * torch.gt(0.5 - d_real_y, 0)) + \
-                     torch.mean((0.5 + d_fake_x.detach()) * torch.gt(0.5 + d_fake_x.detach(), 0)) + \
-                     torch.mean((0.5 + d_fake_y.detach()) * torch.gt(0.5 + d_fake_y.detach(), 0))
+            d_loss = torch.mean(F.relu(0.5 - d_real_x)) + torch.mean(F.relu(0.5 - d_real_y)) + \
+                     torch.mean(F.relu(0.5 + d_fake_x.detach())) + torch.mean(F.relu(0.5 + d_fake_y.detach()))
 
             # Discriminator loss backward
             optim_d.zero_grad()
@@ -138,7 +136,7 @@ def train(rank, a):
             d_fake_x = d_x(fake_x)
             d_fake_y = d_y(real_y)
 
-            g_loss = torch.mean(-d_fake_x * torch.gt(-d_fake_x, 0)) + torch.mean(-d_fake_y * torch.gt(-d_fake_y, 0)) + \
+            g_loss = torch.mean(F.relu(-d_fake_x)) + torch.mean(F.relu(-d_fake_y)) + \
                      a.lambda_cy * F.l1_loss(cycle_x, real_x) + a.lambda_cy * F.l1_loss(cycle_y, real_y) + \
                      a.lambda_id * F.l1_loss(indetity_x, real_x) + a.lambda_id * F.l1_loss(indetity_y, real_y)
 
